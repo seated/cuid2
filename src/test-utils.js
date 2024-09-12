@@ -1,4 +1,19 @@
-const { createId } = require("./index.js");
+const { execSync } = require("child_process");
+
+function createIds(count) {
+  const ids = execSync(
+    `elixir -r cuid2.ex -e "IO.puts(Enum.map_join(1..${count}, \\",\\", fn _ -> Stone.Cuid2.create_id() end))"`
+  )
+    .toString()
+    .trim()
+    .split(",");
+
+  if (ids.length !== count) {
+    console.warn(`Expected ${count} IDs, but received ${ids.length}`);
+  }
+
+  return ids.slice(0, count);
+}
 
 const info = (txt) => console.log(`# - ${txt}`);
 
@@ -29,18 +44,17 @@ const buildHistogram = (numbers, bucketCount = 20) => {
 
 const createIdPool = async ({ max = 100000 } = {}) => {
   const set = new Set();
+  const batchSize = 10000;
 
-  for (let i = 0; i < max; i++) {
-    set.add(createId());
-    if (i % 10000 === 0) console.log(`${Math.floor((i / max) * 100)}%`);
-    if (set.size < i) {
-      info(`Collision at: ${i}`);
-      break;
-    }
+  while (set.size < max) {
+    const remainingIds = max - set.size;
+    const batch = createIds(Math.min(batchSize, remainingIds));
+    batch.forEach((id) => set.add(id));
+    if (set.size % 100000 === 0)
+      console.log(`${Math.floor((set.size / max) * 100)}%`);
   }
-  info("No collisions detected");
 
-  const ids = [...set];
+  const ids = [...set].slice(0, max);
   const numbers = ids.map((x) => idToBigInt(x.substring(1)));
   const histogram = buildHistogram(numbers);
   return { ids, numbers, histogram };
